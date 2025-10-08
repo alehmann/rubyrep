@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    # The devcontainer.json applies features + commands on top of this.
+    volumes:
+      - ..:/workspaces/rubyrep:cached
+    working_dir: /workspaces/rubyrep
+    depends_on:
+      - pg
+      - mysql
+    # Docker-in-Docker not required here.
+
+  pg:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rr
+      POSTGRES_PASSWORD: rrpass
+      POSTGRES_DB: rr_a
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rr"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: rr_b
+      MYSQL_USER: rr
+      MYSQL_PASSWORD: rrpass
+    command: ["--default-authentication-plugin=mysql_native_password"]
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30

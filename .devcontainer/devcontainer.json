@@ -1,0 +1,31 @@
+{
+  "name": "rubyrep dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/rails/devcontainer/features/ruby:2": {
+      "version": "2.4"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "portsAttributes": {
+    "5432": { "label": "PostgreSQL" },
+    "3306": { "label": "MySQL" }
+  },
+  "postCreateCommand": "bundle install",
+  "postStartCommand": "ruby --version && bundle exec rspec -v || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Shopify.ruby-lsp",
+        "rebornix.Ruby",
+        "EditorConfig.EditorConfig"
+      ]
+    }
+  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "updateContentCommand": "bundle exec rake -T || true",
+  "forwardPorts": [5432, 3306],
+  "remoteUser": "vscode"
+}
