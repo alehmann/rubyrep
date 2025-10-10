@@ -5,18 +5,18 @@ RR::Initializer::run do |config|
   config.left = {
     :adapter  => 'postgresql',   
     :database => 'rr_left',
-    :username => 'postgres',   
+    :username => 'rubyrep',   
     :password => 'password',   
-    :host     => 'localhost',
+    :host     => 'pg',
     :min_messages => 'warning'
   }
 
   config.right = {
     :adapter  => 'postgresql',   
     :database => 'rr_right',   
-    :username => 'postgres',   
+    :username => 'rubyrep',   
     :password => 'password',   
-    :host     => 'localhost',
+    :host     => 'pg',
     :min_messages => 'warning'
   }
 

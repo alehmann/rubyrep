@@ -1,19 +1,35 @@
 {
   "name": "rubyrep dev",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {},
-    "ghcr.io/rails/devcontainer/features/ruby:2": {
-      "version": "2.4"
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "runServices": ["pg", "mysql", "dev"],
+  "workspaceFolder": "/workspaces/rubyrep",
+  "forwardPorts": [5432, 3306],
+  "containerEnv": {
+    "PGHOST": "pg",
+    "PGUSER": "rubyrep",
+    "PGPASSWORD": "password",
+    "MYSQL_HOST": "mysql",
+    "MYSQL_USER": "rubyrep",
+    "MYSQL_PASSWORD": "password",
+    "MYSQL_PWD": "password"
   },
   "portsAttributes": {
     "5432": { "label": "PostgreSQL" },
     "3306": { "label": "MySQL" }
   },
-  "postCreateCommand": "bundle install",
-  "postStartCommand": "ruby --version && bundle exec rspec -v || true",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/rails/devcontainer/features/ruby:2": {
+      "version": "2.4"
+    },
+    "ghcr.io/rails/devcontainer/features/postgres-client": {},
+    "ghcr.io/rails/devcontainer/features/mysql-client": {},
+    "docker-from-docker": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -23,9 +39,7 @@
       ]
     }
   },
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "dev",
-  "updateContentCommand": "bundle exec rake -T || true",
-  "forwardPorts": [5432, 3306],
+  "updateContentCommand": "gem list --silent -i -v 2.3.0 bundler || gem install bundler -v 2.3.0 ; bundle install ; true",
+  "shutdownAction": "stopCompose",
   "remoteUser": "vscode"
 }
