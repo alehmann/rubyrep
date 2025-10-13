@@ -109,7 +109,13 @@ module RR
       # @param [ActiveRecord::ConnectionAdapters::PostgreSQLColumn] column the target column
       # @return [String] the quoted string
       def column_aware_quote(value, column)
-        quote column.type_cast_for_database value
+        cast_type = lookup_cast_type_from_column(column)
+        serialized = if value.is_a?(String) && %w[json jsonb].include?(column.sql_type)
+          value
+        else
+          cast_type.serialize(value)
+        end
+        quote(serialized)
       end
 
       # Casts a value returned from the database back into the according ruby type.
@@ -120,14 +126,14 @@ module RR
       def fixed_type_cast(value, column)
         if column.sql_type == 'bytea' and RUBY_PLATFORM == 'java'
           # Apparently in Java / JRuby binary data are automatically unescaped.
-          # So #type_cast_from_database must be prevented from double-unescaping the binary data.
+          # So adapter-level deserialization must be prevented from double-unescaping the binary data.
             value
         else
-          column.type_cast_from_database value
+          cast_type = lookup_cast_type_from_column(column)
+          cast_type.deserialize(value)
         end
       end
 
     end
   end
 end
-

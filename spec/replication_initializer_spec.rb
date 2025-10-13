@@ -183,7 +183,7 @@ describe ReplicationInitializer do
     config.options[:rep_prefix] = 'r2'
     session = Session.new(config)
     initializer = ReplicationInitializer.new(session)
-    initializer.drop_logged_events if initializer.event_log_exists?
+    initializer.drop_event_log if initializer.event_log_exists?
 
     $stderr.stub :write
     initializer.event_log_exists?.should be false

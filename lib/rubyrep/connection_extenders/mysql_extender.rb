@@ -77,7 +77,8 @@ module RR
       # @param [ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter::Column] column the originating column
       # @return [Object] the casted value
       def fixed_type_cast(value, column)
-        column.type_cast_from_database value
+        cast_type = lookup_cast_type_from_column(column)
+        cast_type.deserialize(value)
       end
     end
   end

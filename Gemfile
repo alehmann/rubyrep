@@ -1,7 +1,7 @@
 source 'http://rubygems.org'
 
-gem 'activerecord', '~> 4.2'
-gem 'bigdecimal', '~> 1.3'
+gem 'activerecord', '~> 5.0'
+gem 'bigdecimal'
 
 gem 'pg', platform: :ruby
 gem 'mysql2', platform: :ruby
