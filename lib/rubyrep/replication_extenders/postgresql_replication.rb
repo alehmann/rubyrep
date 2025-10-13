@@ -34,6 +34,16 @@ module RR
         @schema_prefix
       end
 
+      # Return the major and minor version of the connected PostgreSQL instance.
+      #
+      # @return [Float] the version number
+      def postgresql_version
+        unless @postgresql_version
+          @postgresql_version = select_value('show server_version').to_f
+        end
+        @postgresql_version  
+      end
+
       # Creates or replaces the replication trigger function.
       # See #create_replication_trigger for a descriptions of the +params+ hash.
       def create_or_replace_replication_trigger_function(params)
@@ -52,9 +62,7 @@ module RR
           end_sql
         end
 
-        version_string = select_value("select version();")
-        version = version_string.gsub(/^\s*postgresql\s*([0-9.]+).*$/i, '\1')
-        if version >= '8.4'
+        if postgresql_version >= 8.4
           modification_check = <<-end_sql
             IF NEW IS NOT DISTINCT FROM OLD THEN
               RETURN NULL;
@@ -127,6 +135,27 @@ module RR
         end_sql
       end
 
+      # Returns properties (currently: last value and increment) of a sequence
+      #
+      # @param [String] sequence_name name of the sequence
+      # @return [Hash] a hash containing the properties of the sequence
+      # @option [Integer] :value the last value of the sequence
+      # @option [Integer] :increment the increment value of the sequence
+      def sequence_properties(sequence_name)
+        if postgresql_version <= 9
+          row = select_one("select last_value, increment_by from \"#{sequence_name}\"")
+          {
+            value: row['last_value'].to_i,
+            increment: row['increment_by'].to_i
+          }
+        else
+          {
+            value: select_value("select last_value from \"#{sequence_name}\"").to_i,
+            increment: select_value("select seqincrement from pg_sequence where seqrelid = '#{sequence_name}'::regclass").to_i
+          }
+        end   
+      end  
+        
       # Returns all unadjusted sequences of the given table.
       # Parameters:
       # * +rep_prefix+: not used (necessary) for the Postgres
@@ -148,11 +177,7 @@ module RR
             (SELECT oid FROM pg_namespace WHERE nspname in (#{schemas}))
         end_sql
         sequence_names.each do |sequence_name|
-          row = select_one("select last_value, increment_by from \"#{sequence_name}\"")
-          result[sequence_name] = {
-            :increment => row['increment_by'].to_i,
-            :value => row['last_value'].to_i
-          }
+          result[sequence_name] = sequence_properties(sequence_name)
         end
         result
       end
@@ -175,9 +200,9 @@ module RR
           rep_prefix, table_name, increment, offset,
           left_sequence_values, right_sequence_values, adjustment_buffer)
         left_sequence_values.each do |sequence_name, left_current_value|
-          row = select_one("select last_value, increment_by from \"#{sequence_name}\"")
-          current_increment = row['increment_by'].to_i
-          current_value = row['last_value'].to_i
+          properties = sequence_properties(sequence_name)
+          current_increment = properties[:increment]
+          current_value = properties[:value]
           unless current_increment == increment and current_value % increment == offset
             max_current_value =
               [left_current_value[:value], right_sequence_values[sequence_name][:value]].max +
