@@ -38,7 +38,7 @@ describe ScanReportPrinters::ScanDetailReporter do
       # verify dump
       io = StringIO.new($stdout.string.gsub(/^.*left_table.*$/, ''))
       dump_objects = []
-      YAML.load_documents(io) do |yl|
+      YAML.load_stream(io) do |yl|
         dump_objects << yl
       end
       dump_objects.should == [
@@ -69,7 +69,7 @@ describe ScanReportPrinters::ScanDetailReporter do
 
       io = StringIO.new($stdout.string.gsub(/^.*scanner_records.*$/, ''))
       dump_objects = []
-      YAML.load_documents(io) do |yl|
+      YAML.load_stream(io) do |yl|
         dump_objects << yl
       end
       dump_objects.should == [
@@ -103,7 +103,7 @@ describe ScanReportPrinters::ScanDetailReporter do
 
       io = StringIO.new($stdout.string.gsub(/^.*scanner_records.*$/, ''))
       dump_objects = []
-      YAML.load_documents(io) do |yl|
+      YAML.load_stream(io) do |yl|
         dump_objects << yl
       end
       dump_objects.should == [

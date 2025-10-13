@@ -35,6 +35,9 @@ module RR
       self.loaders = loaders
     end
 
+    # These attributes should not be included into the YAML export
+    YAML_IGNORED_IVARS = [:'@session', :'@loaders'].freeze
+
     # Should be set to +true+ if this ReplicationDifference instance was
     # successfully loaded.
     attr_writer :loaded
@@ -92,8 +95,14 @@ module RR
     end
 
     # Prevents session and change loaders from going into YAML output
-    def to_yaml_properties
-      instance_variables.sort.reject {|var_name| [:'@session', :'@loaders'].include? var_name}
+    #
+    # @param coder [Psych::Coder] YAML encoder helper
+    # @return [void]
+    def encode_with(coder)
+      instance_variables.sort.each do |var_name|
+        next if YAML_IGNORED_IVARS.include?(var_name)
+        coder[var_name.to_s.delete('@')] = instance_variable_get(var_name)
+      end
     end
 
   end

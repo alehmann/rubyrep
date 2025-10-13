@@ -48,6 +48,9 @@ module RR
       self.type = :no_change
     end
 
+    # These attributes should not be included into the YAML export
+    YAML_IGNORED_IVARS = [:'@session', :'@loader'].freeze
+
     # A hash describing how the change state morph based on newly found change
     # records.
     # * key: String consisting of 2 letters
@@ -151,9 +154,15 @@ module RR
       end until type != :no_change
     end
 
-    # Prevents session from going into YAML output
-    def to_yaml_properties
-      instance_variables.sort.reject {|var_name| [:'@session', :'@loader'].include? var_name}
+    # Prevents session and change loaders from going into YAML output
+    #
+    # @param coder [Psych::Coder] YAML encoder helper
+    # @return [void]
+    def encode_with(coder)
+      instance_variables.sort.each do |var_name|
+        next if YAML_IGNORED_IVARS.include?(var_name)
+        coder[var_name.to_s.delete('@')] = instance_variable_get(var_name)
+      end
     end
 
   end
