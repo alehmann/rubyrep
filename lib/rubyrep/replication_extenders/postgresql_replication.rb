@@ -149,9 +149,10 @@ module RR
             increment: row['increment_by'].to_i
           }
         else
+          double_quoted_sequence_name = quote_table_name(sequence_name)
           {
-            value: select_value("select last_value from \"#{sequence_name}\"").to_i,
-            increment: select_value("select seqincrement from pg_sequence where seqrelid = '#{sequence_name}'::regclass").to_i
+            value: select_value("select last_value from #{double_quoted_sequence_name}").to_i,
+            increment: select_value("select seqincrement from pg_sequence where seqrelid = '#{double_quoted_sequence_name}'::regclass").to_i
           }
         end   
       end  
@@ -258,4 +259,3 @@ module RR
     end
   end
 end
-
