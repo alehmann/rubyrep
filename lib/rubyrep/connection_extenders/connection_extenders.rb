@@ -104,10 +104,21 @@ module RR
         if ActiveSupport.const_defined?(:Notifications)
           connection_object_id = db_connection.object_id
           db_connection.log_subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |name, start, finish, id, payload|
-            if payload[:connection_id] == connection_object_id and logger.debug?
-              sql = payload[:sql].squeeze(" ") rescue payload[:sql]
-              logger.debug sql
-            end
+            next unless logger.debug?
+
+            matches_connection =
+              if payload.key?(:connection)
+                payload[:connection].equal?(db_connection)
+              elsif payload.key?(:connection_id)
+                payload[:connection_id] == connection_object_id
+              else
+                false
+              end
+
+            next unless matches_connection
+
+            sql = payload[:sql].squeeze(" ") rescue payload[:sql]
+            logger.debug sql
           end
         end
       end

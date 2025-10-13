@@ -3,6 +3,7 @@ $LOAD_PATH.unshift File.dirname(__FILE__) + "/rubyrep"
 
 require 'rubygems'
 require 'yaml'
+require 'logger'
 
 require 'active_record'
 require 'activerecord-jdbc-adapter' if RUBY_PLATFORM == 'java'

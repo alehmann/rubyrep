@@ -41,15 +41,15 @@ shared_examples "ReplicationExtender" do
 
       # Verify that the timestamps are created correctly
       rows.each do |row|
-        change_time = row['change_time']
-        if ENV['RR_TEST_DB'] == 'postgres'
-          # time is stored in UTC but activerecord attaches local time zone
-          change_time += ' UTC'
-        elsif ENV['RR_TEST_DB'] == 'mysql'
-          # time is stored in local time zone but activerecord attaches UTC time zone
-          change_time = change_time.to_s.sub(/ UTC$/, '')
-        end
-        change_time = Time.parse(change_time)
+        raw_change_time = row['change_time']
+
+        change_time =
+          if raw_change_time.respond_to?(:to_time)
+            raw_change_time.to_time
+          else
+            Time.parse(raw_change_time.to_s)
+          end
+
         change_time.should >= change_start - 10.seconds
         change_time.should <= Time.now + 10.seconds
       end
