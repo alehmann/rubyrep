@@ -23,7 +23,10 @@ module RR
           order by ordinal_position
         end_sql
 
-        columns = rows.map {|_row| _row['column_name']}
+        columns = rows.map do |_row|
+          key = _row.keys.find { |name| name.to_s.downcase == 'column_name' }
+          _row[key]
+        end.compact
         columns
       end
 
