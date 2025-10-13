@@ -81,6 +81,19 @@ describe Session do   # here database connection caching is _not_ disabled
     session.right.should be_an_instance_of(ProxyConnection)
   end
 
+  # @param [#raw_connection] connection database connection whose raw socket should be closed
+  # @raise [RuntimeError] when the raw connection does not support `finish` or `close`
+  def finish_raw_connection(connection)
+    raw_connection = connection.raw_connection
+    if raw_connection.respond_to?(:finish)
+      raw_connection.finish
+    elsif raw_connection.respond_to?(:close)
+      raw_connection.close
+    else
+      raise "Cannot finish raw connection #{raw_connection.class}"
+    end
+  end
+
   it "initialize should assign manual primary keys to the proxy connections" do
     config = deep_copy(standard_config)
     config.included_table_specs.clear
@@ -92,7 +105,7 @@ describe Session do   # here database connection caching is _not_ disabled
 
   it "refresh should reestablish the database connections if not active anymore" do
     session = Session.new
-    session.right.destroy
+    finish_raw_connection(session.right.connection)
     session.right.connection.should_not be_active
     lambda {session.right.select_one("select 1+1 as x")}.should raise_error /connection.*closed|not connected|no connection/
     session.refresh
@@ -102,7 +115,7 @@ describe Session do   # here database connection caching is _not_ disabled
 
   it "refresh should raise error even if database connect fails silently" do
     session = Session.new
-    session.right.destroy
+    finish_raw_connection(session.right.connection)
     session.right.connection.should_not be_active
     session.should_receive(:connect_database)
     lambda {session.refresh}.should raise_error(/no connection to.*right.*database/)
@@ -111,7 +124,7 @@ describe Session do   # here database connection caching is _not_ disabled
   it "refresh should work with proxied database connections" do
     ensure_proxy
     session = Session.new(proxied_config)
-    session.right.destroy
+    finish_raw_connection(session.right.connection)
     session.right.connection.should_not be_active
     lambda {session.right.select_one("select 1+1 as x")}.should raise_error /connection.*closed|not connected|no connection/
     session.refresh
@@ -251,4 +264,3 @@ describe Session do   # here database connection caching is _not_ disabled
     session.sort_table_pairs(table_pairs).should == table_pairs
   end
 end
-
