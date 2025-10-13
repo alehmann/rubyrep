@@ -8,7 +8,7 @@ def install_redmine(database, name = nil)
     database.sub!(/^postgres$/, 'postgresql')
 
     FileUtils.cd(File.expand_path("~"))
-    unless File.exists?(name)
+    unless File.exist?(name)
       system "svn checkout -r 2145 http://redmine.rubyforge.org/svn/trunk #{name}"
     end
     FileUtils.cd name

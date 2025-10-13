@@ -75,7 +75,7 @@ describe GenerateRunner do
       runner = GenerateRunner.new
       runner.options = {:file_name => 'my_config_template'}
       runner.execute
-      File.exists?('my_config_template').should be true
+      File.exist?('my_config_template').should be true
     ensure
       File.delete 'my_config_template' rescue nil
     end

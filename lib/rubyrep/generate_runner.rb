@@ -79,7 +79,7 @@ EOS
 
     # Generates a configuration file template.
     def execute
-      if File.exists?(options[:file_name])
+      if File.exist?(options[:file_name])
         raise("Cowardly refuse to overwrite existing file '#{options[:file_name]}'")
       end
       File.open(options[:file_name], 'w') do |f|
