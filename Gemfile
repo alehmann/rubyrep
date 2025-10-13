@@ -1,6 +1,6 @@
 source 'http://rubygems.org'
 
-gem 'activerecord', '~> 7.1'
+gem 'activerecord', '~> 7.2'
 gem 'bigdecimal'
 
 gem 'pg', platform: :ruby

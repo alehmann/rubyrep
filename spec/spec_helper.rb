@@ -41,6 +41,7 @@ def mock_active_record(number_of_calls)
   # We have a spec testing behaviour for non-existing extenders.
   # So extend might not be called in all cases
   dummy_connection.stub(:extend)
+  dummy_connection.stub(:verify!).and_return(true)
   dummy_connection.stub(:tables).and_return([])
   dummy_connection.stub(:select_one).and_return({'x' => '2'})
 

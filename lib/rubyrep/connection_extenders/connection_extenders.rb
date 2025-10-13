@@ -63,6 +63,9 @@ module RR
         puts $stdout.string
         $stdout = org_stdout
       end
+      
+      # Rails 7.2 establishes adapters lazily; explicitly verify so the connection is live.
+      connection.verify!
 
       if ConnectionExtenders.extenders.include? config[:adapter].to_sym
         extender = config[:adapter].to_sym

@@ -21,7 +21,7 @@
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {},
     "ghcr.io/rails/devcontainer/features/ruby:2": {
-      "version": "2.7"
+      "version": "3.3"
     },
     "ghcr.io/rails/devcontainer/features/postgres-client": {},
     "ghcr.io/rails/devcontainer/features/mysql-client": {},
