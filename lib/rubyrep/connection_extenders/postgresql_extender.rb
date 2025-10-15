@@ -124,14 +124,8 @@ module RR
       # @param [ActiveRecord::ConnectionAdapters::PostgreSQLColumn] column the originating column
       # @return [Object] the casted value
       def fixed_type_cast(value, column)
-        if column.sql_type == 'bytea' and RUBY_PLATFORM == 'java'
-          # Apparently in Java / JRuby binary data are automatically unescaped.
-          # So adapter-level deserialization must be prevented from double-unescaping the binary data.
-            value
-        else
-          cast_type = lookup_cast_type_from_column(column)
-          cast_type.deserialize(value)
-        end
+        cast_type = lookup_cast_type_from_column(column)
+        cast_type.deserialize(value)
       end
 
     end

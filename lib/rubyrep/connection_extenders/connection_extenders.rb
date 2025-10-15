@@ -10,6 +10,29 @@ module RR
   # This module itself only provides functionality to register and retrieve
   # such connection extenders.
   module ConnectionExtenders
+    THREAD_POOL_KEY = :rr_active_record_base_pool
+
+    # Executes the given block while exposing +pool+ as the fallback connection pool
+    # for ActiveRecord::Base.
+    #
+    # @param pool [ActiveRecord::ConnectionAdapters::ConnectionPool, nil] the pool to expose
+    # @yield executes within the context of the given pool
+    # @return [Object] the block result
+    def self.with_base_connection_pool(pool)
+      return yield unless pool
+      previous = Thread.current[THREAD_POOL_KEY]
+      Thread.current[THREAD_POOL_KEY] = pool
+      yield
+    ensure
+      Thread.current[THREAD_POOL_KEY] = previous
+    end
+
+    # @return [ActiveRecord::ConnectionAdapters::ConnectionPool, nil] the pool currently exposed
+    #   for ActiveRecord::Base fallback usage.
+    def self.current_base_connection_pool
+      Thread.current[THREAD_POOL_KEY]
+    end
+
     # Returns a Hash of currently registered connection extenders.
     # (Empty Hash if no connection extenders were defined.)
     def self.extenders
@@ -161,5 +184,21 @@ module RR
     def self.clear_db_connection_cache
       @@connection_cache = {}
     end
+  end
+end
+
+class << ActiveRecord::Base
+  unless method_defined?(:rr_original_connection_pool)
+    alias_method :rr_original_connection_pool, :connection_pool
+  end
+
+  # Returns either the configured connection pool or, if none exists, a pool
+  # temporarily exposed by RubyRep.
+  def connection_pool
+    rr_original_connection_pool
+  rescue ActiveRecord::ConnectionNotEstablished
+    fallback_pool = RR::ConnectionExtenders.current_base_connection_pool
+    raise unless fallback_pool
+    fallback_pool
   end
 end

@@ -64,11 +64,11 @@ module RR
       # @param [ActiveRecord::ConnectionAdapters::MySQL::Column] column the target column
       # @return [String] the quoted string
       def column_aware_quote(value, column)
-        if column.sql_type == 'blob' and RUBY_PLATFORM == 'java'
-          quote(column.type_cast_for_database(value))
-        else
-          quote(value)
-        end
+        return quote(value) unless column
+
+        cast_type = lookup_cast_type_from_column(column)
+        serialized = cast_type.serialize(value)
+        quote(serialized)
       end
 
       # Casts a value returned from the database back into the according ruby type.
@@ -79,6 +79,15 @@ module RR
       def fixed_type_cast(value, column)
         cast_type = lookup_cast_type_from_column(column)
         cast_type.deserialize(value)
+      end
+
+      # Returns whether the underlying JDBC connection is active, handling closed sockets gracefully.
+      #
+      # @return [Boolean] true when the adapter reports an active connection; otherwise false
+      def active?
+        super
+      rescue ActiveRecord::ConnectionNotEstablished
+        false
       end
     end
   end

@@ -37,69 +37,73 @@ module RR
 
     # Returns +true+ if there are more rows to read.
     def next?
-      unless self.rows
-        # Try to load some records
-        
-        if options[:query] and last_row != nil
-          # A query was directly specified and all it's rows were returned
-          # ==> Finished.
-          return false
-        end
+      connection.send(:with_base_connection_pool) do
+        unless self.rows
+          # Try to load some records
 
-        if options[:query]
-          # If a query has been directly specified, just directly execute it
-          query = options[:query]
-        else
-          # Otherwise build the query
-          if last_row
-            # There was a previous batch.
-            # Next batch will start after the last returned row
-            options.merge! :from => last_row, :exclude_starting_row => true
+          if options[:query] and last_row != nil
+            # A query was directly specified and all it's rows were returned
+            # ==> Finished.
+            return false
           end
 
-          query = connection.table_select_query(options[:table], options)
+          if options[:query]
+            # If a query has been directly specified, just directly execute it
+            query = options[:query]
+          else
+            # Otherwise build the query
+            if last_row
+              # There was a previous batch.
+              # Next batch will start after the last returned row
+              options.merge! :from => last_row, :exclude_starting_row => true
+            end
 
-          if options[:row_buffer_size]
-            # Set the batch size
-            query += " limit #{options[:row_buffer_size]}"
+            query = connection.table_select_query(options[:table], options)
+
+            if options[:row_buffer_size]
+              # Set the batch size
+              query += " limit #{options[:row_buffer_size]}"
+            end
           end
+
+          self.rows = connection.select_all query
+
+          ###############
+          # Below approach can only be used starting with activerecord version 5.
+          # And as of 2017-05-18 jruby (i.e. version 9.1.7.0) supports only up to activerecord version 4.2.
+          ###############
+          # result = connection.select_all(query)
+          # column_types = result.column_types
+          # columns = result.columns
+          # identity_type = ActiveRecord::Type::Value.new
+          # types = columns.map { |name| column_types.fetch(name, identity_type) }
+          # self.rows = result.rows.map do |values|
+          #   row = {}
+          #   columns.zip(types, values).each do |name, type, value|
+          #     row[name] = type.deserialize(value)
+          #   end
+          #   row
+          # end
+
+          self.current_row_index = 0
         end
-
-        self.rows = connection.select_all query
-
-        ###############
-        # Below approach can only be used starting with activerecord version 5.
-        # And as of 2017-05-18 jruby (i.e. version 9.1.7.0) supports only up to activerecord version 4.2.
-        ###############
-        # result = connection.select_all(query)
-        # column_types = result.column_types
-        # columns = result.columns
-        # identity_type = ActiveRecord::Type::Value.new
-        # types = columns.map { |name| column_types.fetch(name, identity_type) }
-        # self.rows = result.rows.map do |values|
-        #   row = {}
-        #   columns.zip(types, values).each do |name, type, value|
-        #     row[name] = type.deserialize(value)
-        #   end
-        #   row
-        # end
-
-        self.current_row_index = 0
+        self.current_row_index < self.rows.length
       end
-      self.current_row_index < self.rows.length
     end
 
     # Returns the row as a column => value hash and moves the cursor to the next row.
     def next_row
-      raise("no more rows available") unless next?
-      self.last_row = self.rows[self.current_row_index]
-      self.current_row_index += 1
+      connection.send(:with_base_connection_pool) do
+        raise("no more rows available") unless next?
+        self.last_row = self.rows[self.current_row_index]
+        self.current_row_index += 1
 
-      if self.current_row_index == self.rows.length
-        self.rows = nil
+        if self.current_row_index == self.rows.length
+          self.rows = nil
+        end
+
+        self.last_row
       end
-
-      self.last_row
     end
 
     # Frees up all ressources
@@ -157,6 +161,60 @@ module RR
     # * value: array of primary key names
     attr_accessor :manual_primary_keys
     
+    # Executes the provided block with ActiveRecord::Base temporarily exposing the
+    # current connection pool.
+    #
+    # @yield executes while the fallback pool is registered
+    # @return [Object] the block result
+    def with_base_connection_pool
+      pool = connection.respond_to?(:pool) ? connection.pool : nil
+      ConnectionExtenders.with_base_connection_pool(pool) { yield }
+    end
+    private :with_base_connection_pool
+
+    WRAPPED_DELEGATES = [
+      :columns, :quote_column_name, :quote_table_name, :execute,
+      :select_one, :select_all, :tables, :update, :delete,
+      :begin_db_transaction, :rollback_db_transaction, :commit_db_transaction,
+      :referenced_tables, :create_or_replace_replication_trigger_function,
+      :create_replication_trigger, :drop_replication_trigger,
+      :replication_trigger_exists?, :sequence_values, :update_sequences,
+      :clear_sequence_setup, :drop_table, :add_big_primary_key,
+      :add_column, :remove_column
+    ].freeze
+
+    WRAPPED_DELEGATES.each do |method_name|
+      define_method(method_name) do |*args, **kwargs, &block|
+        with_base_connection_pool do
+          connection.public_send(method_name, *args, **kwargs, &block)
+        end
+      end
+    end
+
+    if defined?(JRUBY_VERSION)
+      alias_method :select_one_without_rr_normalization, :select_one
+      alias_method :select_all_without_rr_normalization, :select_all
+
+      # Executes the query and applies JRuby-specific UTF-8 normalization to the returned row.
+      #
+      # @param args [Array] positional arguments forwarded to the original implementation
+      # @param kwargs [Hash] keyword arguments forwarded to the original implementation
+      # @return [Hash, nil] a row hash with normalized column identifiers or `nil` when no row exists
+      # Normalizes result hashes so JDBC keeps UTF-8 identifiers intact (JRuby only).
+      def select_one(*args, **kwargs)
+        normalize_select_result(select_one_without_rr_normalization(*args, **kwargs))
+      end
+
+      # Executes the query and applies JRuby-specific UTF-8 normalization to the returned rows.
+      #
+      # @param args [Array] positional arguments forwarded to the original implementation
+      # @param kwargs [Hash] keyword arguments forwarded to the original implementation
+      # @return [Array<Hash>, ActiveRecord::Result] a normalized result containing UTF-8-safe identifiers
+      def select_all(*args, **kwargs)
+        normalize_select_result(select_all_without_rr_normalization(*args, **kwargs))
+      end
+    end
+
     # Returns an array of primary key names for the given +table_name+.
     # Caches the result for future calls. Allows manual overwrites through
     # the Configuration options +:primary_key_names+ or :+primary_key_only_limit+.
@@ -166,15 +224,17 @@ module RR
     # * +options+: An option hash with the following valid options:
     #   * :+raw+: if +true+, than don't use manual overwrites and don't cache
     def primary_key_names(table_name, options = {})
-      return connection.primary_key_names(table_name) if options[:raw]
-      
-      self.primary_key_names_cache ||= {}
-      result = primary_key_names_cache[table_name]
-      unless result
-        result = manual_primary_keys[table_name] || connection.primary_key_names(table_name)
-        primary_key_names_cache[table_name] = result
+      with_base_connection_pool do
+        return connection.primary_key_names(table_name) if options[:raw]
+
+        self.primary_key_names_cache ||= {}
+        result = primary_key_names_cache[table_name]
+        unless result
+          result = manual_primary_keys[table_name] || connection.primary_key_names(table_name)
+          primary_key_names_cache[table_name] = result
+        end
+        result
       end
-      result
     end
     
     # Creates a table
@@ -206,32 +266,38 @@ module RR
     # * :+row_buffer_size+:
     #   Integer controlling how many rows a read into memory at one time.
     def select_cursor(options)
-      cursor = ResultFetcher.new(self, options)
-      cursor = TypeCastingCursor.new(self, options[:table], cursor)
-      cursor
+      with_base_connection_pool do
+        cursor = ResultFetcher.new(self, options)
+        cursor = TypeCastingCursor.new(self, options[:table], cursor)
+        cursor
+      end
     end
 
     # Reads the designated record from the database.
     # Refer to #select_cursor for details parameter description.
     # Returns the first matching row (column_name => value hash or +nil+).
     def select_record(options)
-      cursor = select_cursor({:row_buffer_size => 1}.merge(options))
-      row = cursor.next? ? cursor.next_row : nil
-      cursor.clear
-      row
+      with_base_connection_pool do
+        cursor = select_cursor({:row_buffer_size => 1}.merge(options))
+        row = cursor.next? ? cursor.next_row : nil
+        cursor.clear
+        row
+      end
     end
     
     # Reads the designated records from the database.
     # Refer to #select_cursor for details parameter description.
     # Returns an array of matching rows (column_name => value hashes).
     def select_records(options)
-      cursor = select_cursor(options)
-      rows = []
-      while cursor.next?
-        rows << cursor.next_row
+      with_base_connection_pool do
+        cursor = select_cursor(options)
+        rows = []
+        while cursor.next?
+          rows << cursor.next_row
+        end
+        cursor.clear
+        rows
       end
-      cursor.clear
-      rows
     end
 
     # Create a session on the proxy side according to provided configuration hash.
@@ -260,12 +326,14 @@ module RR
     # Quotes the given value. It is assumed that the value belongs to the specified column name and table name.
     # Caches the column objects for higher speed.
     def quote_value(table, column, value)
-      self.table_columns ||= {}
-      unless table_columns.include? table
-        table_columns[table] = {}
-        columns(table).each {|c| table_columns[table][c.name] = c}
+      with_base_connection_pool do
+        self.table_columns ||= {}
+        unless table_columns.include? table
+          table_columns[table] = {}
+          columns(table).each {|c| table_columns[table][c.name] = c}
+        end
+        connection.column_aware_quote value, table_columns[table][column.to_s]
       end
-      connection.column_aware_quote value, table_columns[table][column.to_s]
     end
     
     # Create a cursor for the given table.
@@ -289,11 +357,13 @@ module RR
     # The array is ordered in the sequence as returned by the database.
     # The result is cached for higher speed.
     def column_names(table)
-      self.table_column_names ||= {}
-      unless table_column_names.include? table
-        table_column_names[table] = columns(table).map {|c| c.name}
+      with_base_connection_pool do
+        self.table_column_names ||= {}
+        unless table_column_names.include? table
+          table_column_names[table] = columns(table).map {|c| c.name}
+        end
+        table_column_names[table]
       end
-      table_column_names[table]
     end
   
     # Returns a list of quoted column names for the given +table+ as comma 
@@ -313,7 +383,77 @@ module RR
       end.join(', ')
     end
     private :quote_key_list
-    
+
+    if defined?(JRUBY_VERSION)
+      # Normalizes select results to repair mis-encoded identifiers returned by the
+      # JDBC adapter when working with non-ASCII table or column names.
+      #
+      # @param result [Hash, Array<Hash>, ActiveRecord::Result, nil] raw driver response
+      # @return [Hash, Array<Hash>, ActiveRecord::Result, nil] normalized result
+      def normalize_select_result(result)
+        case result
+        when Hash
+          normalize_result_row(result)
+        when Array
+          result.each { |row| normalize_result_row(row) }
+        else
+          normalize_active_record_result(result)
+        end
+      end
+      private :normalize_select_result
+
+      # Normalizes an `ActiveRecord::Result` instance by fixing all stored row hashes.
+      #
+      # @param result [ActiveRecord::Result] raw result produced by ActiveRecord
+      # @return [ActiveRecord::Result] normalized result
+      def normalize_active_record_result(result)
+        return result unless defined?(ActiveRecord::Result) && result.is_a?(ActiveRecord::Result)
+
+        if result.instance_variable_defined?(:@hash_rows)
+          rows = result.instance_variable_get(:@hash_rows)
+          rows&.each { |row| normalize_result_row(row) }
+        else
+          rows = result.to_a.map { |row| normalize_result_row(row) }
+          result.instance_variable_set(:@hash_rows, rows)
+        end
+
+        result
+      end
+      private :normalize_active_record_result
+
+      # Normalizes the keys of a result row hash in place.
+      #
+      # @param row [Hash] row returned by the JDBC adapter
+      # @return [Hash] normalized row hash
+      def normalize_result_row(row)
+        return row unless row.is_a?(Hash)
+
+        row.keys.each do |key|
+          next unless key.is_a?(String)
+
+          normalized = normalize_identifier(key)
+          next if normalized.equal?(key) || normalized == key
+
+          value = row.delete(key)
+          row[normalized] = value
+        end
+
+        row
+      end
+      private :normalize_result_row
+
+      # Restores UTF-8 identifiers that were double-encoded as ISO-8859-1 by the JDBC adapter.
+      #
+      # @param identifier [String] identifier to normalize
+      # @return [String] identifier with corrected encoding, or the original string if conversion fails
+      def normalize_identifier(identifier)
+        identifier.encode('ISO-8859-1').force_encoding('UTF-8')
+      rescue Encoding::InvalidByteSequenceError, Encoding::UndefinedConversionError
+        identifier
+      end
+      private :normalize_identifier
+    end
+
     
     # Generates an sql condition string for the given +table+ based on
     #   * +row+: a hash of primary key => value pairs designating the target row
